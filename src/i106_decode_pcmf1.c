@@ -641,19 +641,18 @@ EnI106Status PrepareNextDecodingRun_PcmF1(SuPcmF1_CurrMsg * psuMsg)
 
 EnI106Status I106_CALL_DECL 
     DecodeMinorFrame_PcmF1(SuPcmF1_CurrMsg * psuMsg)
-{
+    {
 
     SuPcmF1_Attributes * psuAttributes = psuMsg->psuAttributes;
 
     while(psuAttributes->ulBitPosition < psuMsg->ulSubPacketBits)
-    {
+        {
 
         GetNextBit_PcmF1(psuMsg, psuAttributes);
 
         // Check for a sync word
-
-        if(IsSyncWordFound_PcmF1(psuAttributes))
-        {   
+        if (IsSyncWordFound_PcmF1(psuAttributes))
+            {   
             // Prevent an overflow after a terabyte of bits
             if(psuAttributes->ullBitsLoaded > 1000000000000)
                 psuAttributes->ullBitsLoaded = 1000000000;
@@ -663,8 +662,8 @@ EnI106Status I106_CALL_DECL
             //TRACE("Sync word found at BitPos %6d, MFBitCnt %5d, 0x%08X, SyncCnt %6d\n", 
             //  psuAttributes->ulBitPosition, psuAttributes->ulMinorFrameBitCount, (int32_t)psuAttributes->ullTestWord, psuAttributes->ullSyncCount);
 
-            if(psuAttributes->ulMinorFrameBitCount == psuAttributes->ulBitsInMinorFrame)
-            {
+            if (psuAttributes->ulMinorFrameBitCount == psuAttributes->ulBitsInMinorFrame)
+                {
                 // A sync word found at the correct offset to the previous one
 
                 RenewSyncCounters_PcmF1(psuAttributes, psuAttributes->ullSyncCount); // with the current sync counter
@@ -673,10 +672,12 @@ EnI106Status I106_CALL_DECL
                 // Note: a minor frame is released only, if it is followed by a sync word at the correct offset. 
                 // i.e. the sync word are used as brackets
                 if((psuAttributes->ullSyncCount >= psuAttributes->ulMinSyncs) && (psuAttributes->lSaveData > 1)) 
-                {
+                    {
 
                     // Compute the intrapacket time of the start sync bit position in the current buffer
-                    int64_t llBitPosition = (int64_t)psuAttributes->ulBitPosition - (int64_t)psuAttributes->ulBitsInMinorFrame /*- (int64_t)psuAttributes->ulMinorFrameSyncPatLen*/;
+                    int64_t llBitPosition = (int64_t)psuAttributes->ulBitPosition - 
+                                            (int64_t)psuAttributes->ulBitsInMinorFrame 
+                                        /*- (int64_t)psuAttributes->ulMinorFrameSyncPatLen*/;
 
                     double dOffsetIntPktTime = (double)llBitPosition * psuAttributes->dDelta100NanoSeconds;   
 
@@ -686,11 +687,11 @@ EnI106Status I106_CALL_DECL
                     PrepareNewMinorFrameCollection_PcmF1(psuAttributes);
                     return I106_OK;
 
-                }
+                    }
+                } // end sync word in proper position
 
-            }
             else
-            {
+                {
                 // A sync word at the wrong offset, throw away all
                 // Note: a wrong offset is also at the first sync in the whole decoding run
 
@@ -700,156 +701,185 @@ EnI106Status I106_CALL_DECL
 
                 // RenewSyncCounters_PcmF1 with a sync counter of zero
                 RenewSyncCounters_PcmF1(psuAttributes, 0);
-            }
+                } // end sync word not in proper position
 
             PrepareNewMinorFrameCollection_PcmF1(psuAttributes);
             continue;
 
-        } // if sync found
+            } // if sync found
 
         // Collect the data
 
-        if(psuAttributes->lSaveData == 1)
-        {
-            psuAttributes->ulDataWordBitCount++;
-            if(psuAttributes->ulDataWordBitCount >= psuAttributes->ulCommonWordLen)
+        if (psuAttributes->lSaveData == 1)
             {
+            psuAttributes->ulDataWordBitCount++;
+            if (psuAttributes->ulDataWordBitCount >= psuAttributes->ulCommonWordLen)
+                {
                 psuAttributes->paullOutBuf[psuAttributes->ulMinorFrameWordCount - 1] = psuAttributes->ullTestWord;
                 psuAttributes->ulDataWordBitCount = 0;
                 //TRACE("MFWC %d 0x%I64x\n", psuAttributes->ulMinorFrameWordCount - 1, psuAttributes->paullOutBuf[psuAttributes->ulMinorFrameWordCount - 1]);
                 psuAttributes->ulMinorFrameWordCount++;
+                }
             }
-        }
-        if(psuAttributes->ulMinorFrameWordCount >= psuAttributes->ulWordsInMinorFrame)
-        {
-            psuAttributes->lSaveData = 2;
 
+        if (psuAttributes->ulMinorFrameWordCount >= psuAttributes->ulWordsInMinorFrame)
+            {
+            psuAttributes->lSaveData = 2;
             // Don't release the data here but wait for a trailing sync word. 
-        }
-    } // end while
+            }
+
+        } // end while
 
     // Preset for the next run
     psuAttributes->ulBitPosition = 0;
 
-  return I106_NO_MORE_DATA;
-}
+    return I106_NO_MORE_DATA;
+    }
 
 /* ----------------------------------------------------------------------- */
 // Prepare a new minor frame collection
  void PrepareNewMinorFrameCollection_PcmF1(SuPcmF1_Attributes * psuAttributes)
-{
+    {
     psuAttributes->ulDataWordBitCount = 0;
-    psuAttributes->lSaveData = 1;
-}
+    psuAttributes->lSaveData          = 1;
+    }
 
+// ----------------------------------------------------------------------------
 
-/* ----------------------------------------------------------------------- */
 // Get the next bit
+
 void GetNextBit_PcmF1(SuPcmF1_CurrMsg * psuMsg, SuPcmF1_Attributes * psuAttributes)
-{
+    {
     psuAttributes->ullTestWord <<= 1;
     //TRACE("%d\n", psuAttributes->ulBitPosition);
-    if(IsBitSetL2R(psuMsg->pauData, psuAttributes->ulBitPosition))
-    {
+
+    if (IsBitSetL2R(psuMsg->pauData, psuAttributes->ulBitPosition))
+        {
         psuAttributes->ullTestWord |= 1;
-    }
+        }
+
     psuAttributes->ullBitsLoaded++;
     psuAttributes->ulMinorFrameBitCount++;
     psuAttributes->ulBitPosition++;
+    }
 
-}
+// ----------------------------------------------------------------------------
 
-/* ----------------------------------------------------------------------- */
 // Check for a sync word
-int IsSyncWordFound_PcmF1(SuPcmF1_Attributes * psuAttributes)
-{
-    return((psuAttributes->ullBitsLoaded >= psuAttributes->ulMinorFrameSyncPatLen) && 
-                (psuAttributes->ullTestWord & psuAttributes->ullMinorFrameSyncMask) == psuAttributes->ullMinorFrameSyncPat);
-}
+// DESPITE BEING DEFINED AS AN int FUNCTION, THIS REALLY RETURNS A bool.
 
-/* ----------------------------------------------------------------------- */
+int IsSyncWordFound_PcmF1(SuPcmF1_Attributes * psuAttributes)
+    {
+    return ((psuAttributes->ullBitsLoaded                                       >= psuAttributes->ulMinorFrameSyncPatLen) && 
+            (psuAttributes->ullTestWord & psuAttributes->ullMinorFrameSyncMask) == psuAttributes->ullMinorFrameSyncPat);
+    }
+
+// ----------------------------------------------------------------------------
+
 // RenewSyncCounters_PcmF1
+
 void RenewSyncCounters_PcmF1(SuPcmF1_Attributes * psuAttributes, uint64_t ullSyncCount)
-{
+    {
     psuAttributes->ulMinorFrameBitCount = 0; 
     psuAttributes->ulMinorFrameWordCount = 1; // Note the 1: this is the sync word
     psuAttributes->ulDataWordBitCount = 0;
     psuAttributes->ullSyncCount = ullSyncCount;
-}
+    }
 
-/* ----------------------------------------------------------------------- */
+// ----------------------------------------------------------------------------
+
+// Check PCM word parity.
 // Returns I106_OK on success, I106_INVALID_DATA on error
+
 EnI106Status I106_CALL_DECL
     CheckParity_PcmF1(uint64_t ullTestWord, int iWordLen, int iParityType, int iParityTransferOrder)
-          // check the parity of a word
-{
-    uint64_t ullTestBit = 1;
-    unsigned int uBitSum = 0;
-
-    switch(iParityType)
     {
-    case PCM_PARITY_NONE:
-        break;
-    case PCM_PARITY_EVEN:
-        while(iWordLen-- > 0)
+    uint64_t        ullTestBit = 1;
+    unsigned int    uBitSum    = 0;
+
+    switch (iParityType)
         {
-            if(ullTestWord & ullTestBit) uBitSum++;
-            ullTestBit <<= 1;
-        }
-        if(uBitSum & 1) return(I106_INVALID_DATA);
-        break;
-    case PCM_PARITY_ODD:
-        while(iWordLen-- > 0)
-        {
-            if(ullTestWord & ullTestBit) uBitSum++;
-            ullTestBit <<= 1;
-        }
-        if( ! (uBitSum & 1)) return(I106_INVALID_DATA);
-        break;
-    default: // none
-        break;
-    }
+        case PCM_PARITY_NONE:
+            break;
+        case PCM_PARITY_EVEN:
+            while (iWordLen-- > 0)
+                {
+                if(ullTestWord & ullTestBit) uBitSum++;
+                ullTestBit <<= 1;
+                }
+            if (uBitSum & 1) return(I106_INVALID_DATA);
+            break;
+        case PCM_PARITY_ODD:
+            while (iWordLen-- > 0)
+                {
+                if(ullTestWord & ullTestBit) uBitSum++;
+                ullTestBit <<= 1;
+                }
+            if (!(uBitSum & 1)) return(I106_INVALID_DATA);
+            break;
+        default: // none
+            break;
+        } // end switch on parity cases
+
     return(I106_OK);
-}
+    }
 
 /* ----------------------------------------------------------------------- */
+
 // Swaps nBytes in place
+// nBytes must be a multiple of 2 (i.e. two bytes)
+
 EnI106Status I106_CALL_DECL SwapBytes_PcmF1(uint8_t *pubBuffer, long nBytes)
-{
+    {
     uint32_t idata = 0x03020100;
-    uint8_t ubTemp;
+    uint8_t  ubTemp;
+
     if(nBytes & 1)
         return(I106_BUFFER_OVERRUN); // May be also an underrun ...
+
     while((nBytes -= 2) >= 0)
-    {
-        ubTemp = *pubBuffer;
+        {
+         ubTemp    = *pubBuffer;
         *pubBuffer = *(pubBuffer + 1);
-        *++pubBuffer = ubTemp;
-        pubBuffer++;
-    }
+         pubBuffer++;
+        *pubBuffer = ubTemp;
+         pubBuffer++;
+        }
+
+// HUH???? TEST CODE???
     SwapShortWords_PcmF1((uint16_t *)&idata, 4);
 
     return(I106_OK);
-}
+    }
 
-/* ----------------------------------------------------------------------- */
-// Swaps nbytes of 16 bit words in place
+// -----------------------------------------------------------------------
+
+// Swaps nbytes of 16 bit words in place.
+// nBytes must be a multiple of 4 (i.e. two 16 bit words)
+
 EnI106Status I106_CALL_DECL SwapShortWords_PcmF1(uint16_t *puBuffer, long nBytes)
-{
+    {
     long Counter = nBytes;
     uint16_t ubTemp;
-    if(nBytes & 3)
+
+    if (nBytes & 3)
         return(I106_BUFFER_OVERRUN); // May be also an underrun ...
-    Counter >>= 1;
+
+// HMMM... THIS IS STRANGE LOGIC. DIVIDE nBytes BY TWO HERE. THEN LATER
+// DECREMENT COUNTER BY 2. STRANGE BUT MAYBE IT WORKS.
+    Counter >>= 1; 
+
     while((Counter -= 2) >= 0)
-    {
-        ubTemp = *puBuffer;
+        {
+         ubTemp   = *puBuffer;
         *puBuffer = *(puBuffer + 1);
-        *++puBuffer = ubTemp;
-        puBuffer++;
-    }
+         puBuffer++;
+        *puBuffer = ubTemp;
+         puBuffer++;
+        }
+
     return(I106_OK);
-}
+    }
 
 #ifdef __cplusplus
 } // end namespace
